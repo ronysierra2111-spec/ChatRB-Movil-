@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ChatRB 💬</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#38bdf8">
+<style>
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #0f172a;
+  color: white;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+}
+
+/* Encabezado */
+header {
+  background: #1e293b;
+  width: 100%;
+  text-align: center;
+  padding: 12px;
+  color: #38bdf8;
+  font-weight: bold;
+  font-size: 22px;
+  box-shadow: 0 0 10px #0ea5e9;
+}
+
+/* Contenedor general */
+#chatContainer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  width: 95%;
+  max-width: 1000px;
+  gap: 15px;
+  margin-top: 15px;
+}
+
+/* Caja del chat */
+#chat {
+  background: #1e293b;
+  flex: 2;
+  height: 400px;
+  border-radius: 10px;
+  padding: 10px;
+  overflow-y: auto;
+  box-shadow: 0 0 10px #0ea5e9;
+  width: 100%;
+}
+
+/* Usuarios */
+#users {
+  background: #1e293b;
+  flex: 1;
+  border-radius: 10px;
+  padding: 10px;
+  height: 400px;
+  overflow-y: auto;
+  box-shadow: 0 0 10px #0ea5e9;
+  min-width: 200px;
+}
+
+input, button {
+  padding: 10px;
+  border-radius: 8px;
+  border: none;
+  margin-bottom: 5px;
+}
+
+input {
+  background: #334155;
+  color: white;
+}
+
+button {
+  background: #38bdf8;
+  color: #0f172a;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+button:hover { background: #0ea5e9; }
+
+/* Chat inferior */
+#controls {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+#messageInput {
+  flex: 1;
+  min-width: 200px;
+}
+
+/* Popup nombre */
+#namePopup {
+  display: none;
+  position: fixed;
+  top:0; left:0; width:100%; height:100%;
+  background: rgba(0,0,0,0.8);
+  justify-content: center;
+  align-items: center;
+  z-index: 100;
+}
+#namePopupContent {
+  background: #1e293b;
+  padding: 20px;
+  border-radius: 10px;
+  text-align: center;
+}
+
+/* Botón instalar */
+#installBtn {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: #38bdf8;
+  color: #0f172a;
+  border: none;
+  border-radius: 50px;
+  padding: 12px 20px;
+  font-weight: bold;
+  box-shadow: 0 0 10px #0ea5e9;
+  display: none;
+}
+
+/* Responsivo */
+@media (max-width: 700px) {
+  #chatContainer { flex-direction: column; align-items: center; }
+  #chat, #users { width: 90%; height: 350px; }
+  #controls { flex-direction: column; align-items: center; width: 90%; }
+}
+</style>
+</head>
+<body>
+
+<header>💬 ChatRB - Conexión PC y Móvil</header>
+
+<div id="chatContainer">
+  <div id="chat"></div>
+  <div id="users">
+    <h3>Usuarios Conectados</h3>
+    <ul id="userList"></ul>
+  </div>
+</div>
+
+<div id="controls">
+  <input type="text" id="messageInput" placeholder="Escribe un mensaje...">
+  <button id="sendBtn">Enviar</button>
+  <input type="text" id="groupCodeInput" placeholder="Código del grupo">
+  <button id="joinGroupBtn">Unirse</button>
+  <button id="createGroupBtn">Crear grupo</button>
+  <button id="logoutBtn">Cerrar sesión</button>
+</div>
+
+<button id="installBtn">📱 Agregar a inicio</button>
+
+<!-- Popup nombre -->
+<div id="namePopup">
+  <div id="namePopupContent">
+    <h2>Elige tu nombre</h2>
+    <input type="text" id="usernameInput" placeholder="Tu nombre...">
+    <br><br>
+    <button id="setNameBtn">Aceptar</button>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
+import { getFirestore, collection, addDoc, doc, setDoc, query, orderBy, onSnapshot, getDocs, updateDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyB8laLYCXZvLj_f5iI0DSBBxy4rCmcWF38",
+  authDomain: "chatrb-850cb.firebaseapp.com",
+  projectId: "chatrb-850cb",
+  storageBucket: "chatrb-850cb.firebasestorage.app",
+  messagingSenderId: "952386742311",
+  appId: "1:952386742311:web:a0a6cf328be2ee6147c602"
+};
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+let username = "";
+let currentGroup = "";
+let firstLoad = true;
+
+// Pedir permiso notificaciones
+if ("Notification" in window) {
+  Notification.requestPermission();
+}
+
+// Popup nombre
+function mostrarPopup(){ document.getElementById("namePopup").style.display = "flex"; }
+
+if(localStorage.getItem("username")){
+  username = localStorage.getItem("username");
+  registrarUsuario();
+} else mostrarPopup();
+
+document.getElementById("setNameBtn").addEventListener("click", ()=>{
+  const input = document.getElementById("usernameInput").value.trim();
+  if(input){
+    username = input;
+    localStorage.setItem("username", username);
+    document.getElementById("namePopup").style.display = "none";
+    registrarUsuario();
+  }
+});
+
+// Registrar usuario
+async function registrarUsuario(){
+  const userRef = doc(db,"usuarios",username);
+  await setDoc(userRef,{online:true});
+  const q = query(collection(db,"usuarios"));
+  onSnapshot(q,(snapshot)=>{
+    const ul = document.getElementById("userList");
+    ul.innerHTML="";
+    snapshot.forEach(doc=>{
+      const data = doc.data();
+      ul.innerHTML += `<li>${doc.id} - ${data.online ? "🟢":"⚫"}</li>`;
+    });
+  });
+}
+
+// Crear grupo
+async function crearGrupo(){
+  const code = prompt("Código del grupo:");
+  if(!code) return;
+  const grupoRef = doc(db,"grupos",code);
+  await setDoc(grupoRef,{miembros:[username]});
+  currentGroup = code;
+  escucharMensajes();
+  alert("Grupo creado: " + code);
+}
+
+// Unirse grupo
+async function unirseGrupo(){
+  const code = document.getElementById("groupCodeInput").value.trim();
+  if(!code) return;
+  const grupoRef = doc(db,"grupos",code);
+  const grupos = await getDocs(collection(db,"grupos"));
+  const existe = grupos.docs.find(d=>d.id===code);
+  if(!existe){ alert("Grupo no existe"); return;}
+  await updateDoc(grupoRef,{miembros:arrayUnion(username)});
+  currentGroup = code;
+  escucharMensajes();
+  alert("Unido al grupo: " + code);
+}
+
+// Enviar mensaje
+async function enviarMensaje(){
+  const texto = document.getElementById("messageInput").value.trim();
+  if(!texto || !currentGroup) return;
+  await addDoc(collection(db,"mensajes"),{
+    texto, username, grupo: currentGroup, fecha: new Date()
+  });
+  document.getElementById("messageInput").value="";
+}
+
+// Escuchar mensajes
+function escucharMensajes(){
+  const q = query(collection(db,"mensajes"), orderBy("fecha"));
+  onSnapshot(q,(snapshot)=>{
+    const chat = document.getElementById("chat");
+    chat.innerHTML="";
+    snapshot.forEach(doc=>{
+      const d = doc.data();
+      if(d.grupo===currentGroup){
+        chat.innerHTML += `<p><strong>${d.username}:</strong> ${d.texto}</p>`;
+        if(!firstLoad && d.username!==username && Notification.permission==="granted"){
+          new Notification(`Nuevo mensaje de ${d.username}`, { body: d.texto });
+        }
+      }
+    });
+    chat.scrollTop = chat.scrollHeight;
+    firstLoad = false;
+  });
+}
+
+document.getElementById("sendBtn").addEventListener("click", enviarMensaje);
+document.getElementById("messageInput").addEventListener("keypress",(e)=>{ if(e.key==="Enter") enviarMensaje(); });
+document.getElementById("createGroupBtn").addEventListener("click", crearGrupo);
+document.getElementById("joinGroupBtn").addEventListener("click", unirseGrupo);
+document.getElementById("logoutBtn").addEventListener("click", ()=>{
+  localStorage.removeItem("username");
+  location.reload();
+});
+
+// --- Botón instalar como app ---
+let deferredPrompt;
+const installBtn = document.getElementById("installBtn");
+
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  installBtn.style.display = "block";
+});
+
+installBtn.addEventListener("click", async () => {
+  installBtn.style.display = "none";
+  if (deferredPrompt) {
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt = null;
+  } else {
+    alert("Usa el menú del navegador → Agregar a pantalla de inicio.");
+  }
+});
+</script>
+</body>
+</html>
